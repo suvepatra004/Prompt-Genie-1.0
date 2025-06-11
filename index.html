@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PromptGenie - AI Prompt Generator</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-magic"></i>
+                    <h1>PromptGenie</h1>
+                </div>
+                <div class="header-actions">
+                    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <button class="library-btn" id="libraryBtn">
+                        <i class="fas fa-bookmark"></i>
+                        Library
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- API Key Setup -->
+        <div class="api-setup" id="apiSetup">
+            <div class="setup-card">
+                <div class="setup-icon">
+                    <i class="fas fa-key"></i>
+                </div>
+                <h2>Setup Your API Key</h2>
+                <p>Enter your Google Gemini API key to get started. Your key is stored locally and never shared.</p>
+                <div class="input-group">
+                    <input type="password" id="apiKeyInput" placeholder="Enter your Gemini API key">
+                    <button class="btn btn-primary" id="saveApiKey">
+                        <i class="fas fa-save"></i>
+                        Save Key
+                    </button>
+                </div>
+                <div class="help-text">
+                    <p>Don't have an API key? <a href="https://makersuite.google.com/app/apikey" target="_blank">Get one free from Google AI Studio</a></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content" id="mainContent" style="display: none;">
+            <!-- Step 1: Input Analysis -->
+            <section class="step-section active" id="inputStep">
+                <div class="step-header">
+                    <div class="step-number">1</div>
+                    <div class="step-info">
+                        <h2>Describe Your Idea</h2>
+                        <p>Tell us what you want to create with AI. Be as detailed or brief as you like.</p>
+                    </div>
+                </div>
+                
+                <div class="input-card">
+                    <div class="textarea-container">
+                        <textarea 
+                            id="userInput" 
+                            placeholder="Example: I want to write a product description for my new eco-friendly water bottle..."
+                            rows="6"
+                        ></textarea>
+                        <div class="char-count">
+                            <span id="charCount">0</span> characters
+                        </div>
+                    </div>
+                    
+                    <div class="input-actions">
+                        <button class="btn btn-secondary" id="clearInput">
+                            <i class="fas fa-trash"></i>
+                            Clear
+                        </button>
+                        <button class="btn btn-primary" id="analyzeBtn">
+                            <i class="fas fa-search"></i>
+                            Analyze & Generate Questions
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Example Prompts -->
+                <div class="examples-section">
+                    <h3>Need inspiration? Try these examples:</h3>
+                    <div class="examples-grid">
+                        <div class="example-card" data-example="I want to write a compelling email to potential customers about our new software product">
+                            <i class="fas fa-envelope"></i>
+                            <span>Marketing Email</span>
+                        </div>
+                        <div class="example-card" data-example="I need to create a blog post about sustainable living tips for beginners">
+                            <i class="fas fa-blog"></i>
+                            <span>Blog Post</span>
+                        </div>
+                        <div class="example-card" data-example="I want to write a creative story about a time traveler who gets stuck in the past">
+                            <i class="fas fa-book"></i>
+                            <span>Creative Story</span>
+                        </div>
+                        <div class="example-card" data-example="I need help writing a professional LinkedIn post about career growth">
+                            <i class="fab fa-linkedin"></i>
+                            <span>Social Media</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Step 2: Questions -->
+            <section class="step-section" id="questionsStep">
+                <div class="step-header">
+                    <div class="step-number">2</div>
+                    <div class="step-info">
+                        <h2>Answer Questions</h2>
+                        <p>Help us understand your needs better by answering these questions.</p>
+                    </div>
+                </div>
+
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text">
+                        <span id="progressText">0 of 0 questions answered</span>
+                    </div>
+                </div>
+
+                <div class="questions-container" id="questionsContainer">
+                    <!-- Questions will be dynamically generated here -->
+                </div>
+
+                <div class="questions-actions">
+                    <button class="btn btn-secondary" id="backToInput">
+                        <i class="fas fa-arrow-left"></i>
+                        Back to Input
+                    </button>
+                    <button class="btn btn-primary" id="generatePrompt" disabled>
+                        <i class="fas fa-magic"></i>
+                        Generate Optimized Prompt
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 3: Generated Prompt -->
+            <section class="step-section" id="resultStep">
+                <div class="step-header">
+                    <div class="step-number">3</div>
+                    <div class="step-info">
+                        <h2>Your Optimized Prompt</h2>
+                        <p>Here's your AI-optimized prompt ready to use in any AI tool.</p>
+                    </div>
+                </div>
+
+                <div class="result-card">
+                    <div class="result-header">
+                        <h3>Generated Prompt</h3>
+                        <div class="result-actions">
+                            <button class="btn btn-icon" id="copyPrompt" title="Copy to clipboard">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                            <button class="btn btn-icon" id="downloadPrompt" title="Download as text file">
+                                <i class="fas fa-download"></i>
+                            </button>
+                            <button class="btn btn-icon" id="savePrompt" title="Save to library">
+                                <i class="fas fa-bookmark"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="prompt-display" id="generatedPrompt">
+                        <!-- Generated prompt will appear here -->
+                    </div>
+                </div>
+
+                <div class="result-footer">
+                    <button class="btn btn-secondary" id="backToQuestions">
+                        <i class="fas fa-arrow-left"></i>
+                        Back to Questions
+                    </button>
+                    <button class="btn btn-primary" id="startOver">
+                        <i class="fas fa-plus"></i>
+                        Generate New Prompt
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Prompt Library Modal -->
+        <div class="modal" id="libraryModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Prompt Library</h2>
+                    <button class="modal-close" id="closeLibrary">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="library-search">
+                        <div class="search-container">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="librarySearch" placeholder="Search your prompts...">
+                        </div>
+                    </div>
+                    <div class="library-content" id="libraryContent">
+                        <!-- Saved prompts will appear here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loadingOverlay">
+            <div class="loading-spinner">
+                <div class="spinner"></div>
+                <p id="loadingText">Analyzing your input...</p>
+            </div>
+        </div>
+
+        <!-- Toast Notifications -->
+        <div class="toast-container" id="toastContainer"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
