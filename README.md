@@ -50,24 +50,24 @@
 ### Installation
 
 1. **Clone the repository**
-   \`\`\`bash
+   ```bash
    git clone https://github.com/yourusername/promptgenie.git
    cd promptgenie
-   \`\`\`
+   ```
 
 2. **Install dependencies**
-   \`\`\`bash
+   ```bash
    npm install
    # or
    yarn install
-   \`\`\`
+   ```
 
 3. **Run the development server**
-   \`\`\`bash
+   ```bash
    npm run dev
    # or
    yarn dev
-   \`\`\`
+   ```
 
 4. **Open your browser**
    Navigate to [http://localhost:3000](http://localhost:3000)
@@ -82,7 +82,7 @@
 
 ## 📁 Project Structure
 
-\`\`\`
+```
 promptgenie/
 ├── app/                          # Next.js App Router
 │   ├── globals.css              # Global styles and theme variables
@@ -114,7 +114,7 @@ promptgenie/
 ├── tailwind.config.ts         # Tailwind CSS configuration
 ├── tsconfig.json             # TypeScript configuration
 └── README.md                 # Project documentation
-\`\`\`
+```
 
 ## 🎯 How to Use
 
@@ -199,7 +199,7 @@ Shadcn/UI based components:
 - **Borders**: Rounded corners and border styles
 
 ### Theme Variables
-\`\`\`css
+```css
 :root {
   --primary: 221.2 83.2% 53.3%;
   --background: 0 0% 100%;
@@ -212,7 +212,7 @@ Shadcn/UI based components:
   --foreground: 210 40% 98%;
   /* ... dark theme overrides */
 }
-\`\`\`
+```
 
 ### Responsive Design
 - **Mobile First**: Designed for mobile, enhanced for desktop
@@ -229,7 +229,7 @@ Shadcn/UI based components:
 - **Validation**: API key format and functionality testing
 
 ### API Key Management
-\`\`\`typescript
+```typescript
 interface APIKey {
   id: string
   name: string
@@ -238,7 +238,7 @@ interface APIKey {
   isWorking: boolean
   lastTested: string
 }
-\`\`\`
+```
 
 ## 📱 Browser Support
 
@@ -252,7 +252,7 @@ interface APIKey {
 
 ### Available Scripts
 
-\`\`\`bash
+```bash
 # Development server
 npm run dev
 
@@ -267,15 +267,15 @@ npm run lint
 
 # Type checking
 npm run type-check
-\`\`\`
+```
 
 ### Environment Variables
 
 Create a `.env.local` file:
-\`\`\`env
+```env
 # Optional: Default API endpoint
 NEXT_PUBLIC_GEMINI_API_URL=https://generativelanguage.googleapis.com/v1beta
-\`\`\`
+```
 
 ## 🤝 Contributing
 
