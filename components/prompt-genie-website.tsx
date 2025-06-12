@@ -10,6 +10,7 @@ import { Slider } from "@/components/ui/slider"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { LoginForm } from "@/components/auth/login-form"
 import { SignupForm } from "@/components/auth/signup-form"
 import {
@@ -48,6 +49,7 @@ import {
   Linkedin,
   CheckCircle,
   AlertCircle,
+  UserPlus,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
@@ -79,6 +81,7 @@ interface APIKey {
   id: string
   name: string
   key: string
+  model: string // Added model field
   isActive: boolean
   isWorking: boolean
   lastTested: string
@@ -90,6 +93,7 @@ interface UserType {
   email: string
   password: string // Encrypted password
   createdAt: string
+  lastLogin?: string // Added last login tracking
 }
 
 // Simple encryption/decryption for demo purposes
@@ -104,6 +108,26 @@ const decryptPassword = (encryptedPassword: string): string => {
     return ""
   }
 }
+
+// Session management
+const SESSION_DURATION = 24 * 60 * 60 * 1000 // 24 hours
+const isSessionValid = (lastLogin?: string): boolean => {
+  if (!lastLogin) return false
+  const now = new Date().getTime()
+  const loginTime = new Date(lastLogin).getTime()
+  return now - loginTime < SESSION_DURATION
+}
+
+// Available LLM models
+const LLM_MODELS = [
+  { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash", provider: "Google" },
+  { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro", provider: "Google" },
+  { value: "gemini-1.0-pro", label: "Gemini 1.0 Pro", provider: "Google" },
+  { value: "gpt-4", label: "GPT-4", provider: "OpenAI" },
+  { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo", provider: "OpenAI" },
+  { value: "claude-3-opus", label: "Claude 3 Opus", provider: "Anthropic" },
+  { value: "claude-3-sonnet", label: "Claude 3 Sonnet", provider: "Anthropic" },
+]
 
 export function PromptGenieWebsite() {
   const [currentView, setCurrentView] = useState<"landing" | "app">("landing")
@@ -135,6 +159,7 @@ export function PromptGenieWebsite() {
   const [hasAccount, setHasAccount] = useState(false)
   const [newApiKeyName, setNewApiKeyName] = useState("")
   const [newApiKeyValue, setNewApiKeyValue] = useState("")
+  const [newApiKeyModel, setNewApiKeyModel] = useState("")
 
   const { toast } = useToast()
 
@@ -173,6 +198,20 @@ export function PromptGenieWebsite() {
       const savedTheme = safeLocalStorageGet("theme", "light") as "light" | "dark"
       const savedPromptsList = JSON.parse(safeLocalStorageGet("saved_prompts", "[]"))
 
+      // Check session validity
+      if (savedUser && !isSessionValid(savedUser.lastLogin)) {
+        // Session expired, clear user data
+        safeLocalStorageSet("promptgenie_user", "null")
+        setUser(null)
+        toast({
+          title: "Session Expired",
+          description: "Please sign in again to continue.",
+          variant: "destructive",
+        })
+      } else if (savedUser) {
+        setUser(savedUser)
+      }
+
       // Clean expired prompts (older than 23 hours)
       const now = new Date()
       const validPrompts = savedPromptsList.filter((prompt: SavedPrompt) => {
@@ -184,7 +223,6 @@ export function PromptGenieWebsite() {
         }
       })
 
-      setUser(savedUser)
       setApiKeys(savedApiKeys)
       setActiveApiKey(savedActiveKey)
       setTheme(savedTheme)
@@ -257,12 +295,14 @@ export function PromptGenieWebsite() {
 
       // Simple validation for demo
       if (name && email && password.length >= 8) {
+        const now = new Date().toISOString()
         const newUser: UserType = {
           id: Date.now().toString(),
           name,
           email,
           password: encryptPassword(password), // Encrypt password
-          createdAt: new Date().toISOString(),
+          createdAt: now,
+          lastLogin: now,
         }
 
         // Store user in users list
@@ -304,6 +344,14 @@ export function PromptGenieWebsite() {
       const foundUser = existingUsers.find((u: UserType) => u.email === email)
 
       if (foundUser && decryptPassword(foundUser.password) === password) {
+        // Update last login
+        const now = new Date().toISOString()
+        foundUser.lastLogin = now
+
+        // Update user in storage
+        const updatedUsers = existingUsers.map((u: UserType) => (u.id === foundUser.id ? foundUser : u))
+        safeLocalStorageSet("promptgenie_users", JSON.stringify(updatedUsers))
+
         // Set current user (without password)
         const userWithoutPassword = { ...foundUser }
         delete (userWithoutPassword as any).password
@@ -343,21 +391,10 @@ export function PromptGenieWebsite() {
   }
 
   const addApiKey = async () => {
-    if (!newApiKeyName.trim() || !newApiKeyValue.trim()) {
+    if (!newApiKeyName.trim() || !newApiKeyValue.trim() || !newApiKeyModel.trim()) {
       toast({
         title: "Error",
-        description: "Please enter both name and API key",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Basic API key format validation
-    if (!newApiKeyValue.startsWith("AIza") || newApiKeyValue.length < 30) {
-      toast({
-        title: "Error",
-        description:
-          "Invalid API key format. Gemini API keys should start with 'AIza' and be at least 30 characters long.",
+        description: "Please fill in all fields including the model selection",
         variant: "destructive",
       })
       return
@@ -377,12 +414,13 @@ export function PromptGenieWebsite() {
     setLoadingText("Testing API key...")
 
     try {
-      const isWorking = await testApiKey(newApiKeyValue)
+      const isWorking = await testApiKey(newApiKeyValue, newApiKeyModel)
 
       const newApiKey: APIKey = {
         id: Date.now().toString(),
         name: newApiKeyName,
         key: newApiKeyValue,
+        model: newApiKeyModel,
         isActive: apiKeys.length === 0, // First key becomes active
         isWorking,
         lastTested: new Date().toISOString(),
@@ -399,6 +437,7 @@ export function PromptGenieWebsite() {
 
       setNewApiKeyName("")
       setNewApiKeyValue("")
+      setNewApiKeyModel("")
 
       toast({
         title: isWorking ? "Success" : "Warning",
@@ -419,20 +458,24 @@ export function PromptGenieWebsite() {
     }
   }
 
-  const testApiKey = async (key: string): Promise<boolean> => {
+  const testApiKey = async (key: string, model: string): Promise<boolean> => {
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: "Hello" }] }],
-          }),
-        },
-      )
-
-      return response.ok
+      // Test based on model provider
+      if (model.startsWith("gemini")) {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: "Hello" }] }],
+            }),
+          },
+        )
+        return response.ok
+      }
+      // Add other providers as needed
+      return false
     } catch (error) {
       console.error("API key test error:", error)
       return false
@@ -540,7 +583,7 @@ export function PromptGenieWebsite() {
     setLoadingText("Analyzing your input and generating questions...")
 
     try {
-      const questions = await generateQuestionsFromAI(userInput)
+      const questions = await generateQuestionsFromAI(userInput, activeKey)
       setCurrentQuestions(questions)
       setCurrentAnswers({})
 
@@ -566,12 +609,7 @@ export function PromptGenieWebsite() {
     }
   }
 
-  const generateQuestionsFromAI = async (input: string): Promise<Question[]> => {
-    const activeKey = apiKeys.find((key) => key.id === activeApiKey)
-    if (!activeKey) {
-      throw new Error("No active API key found")
-    }
-
+  const generateQuestionsFromAI = async (input: string, apiKey: APIKey): Promise<Question[]> => {
     const prompt = `
     Analyze this user input and generate 5-10 highly relevant questions to help create an optimized AI prompt.
     
@@ -601,38 +639,43 @@ export function PromptGenieWebsite() {
     `
 
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeKey.key}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [{ text: prompt }],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.7,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 2048,
-            },
-          }),
-        },
-      )
+      let response
 
-      if (!response.ok) {
-        if (response.status === 400) {
+      if (apiKey.model.startsWith("gemini")) {
+        response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${apiKey.model}:generateContent?key=${apiKey.key}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              contents: [
+                {
+                  parts: [{ text: prompt }],
+                },
+              ],
+              generationConfig: {
+                temperature: 0.7,
+                topK: 40,
+                topP: 0.95,
+                maxOutputTokens: 2048,
+              },
+            }),
+          },
+        )
+      }
+      // Add other model providers here as needed
+
+      if (!response || !response.ok) {
+        if (response?.status === 400) {
           throw new Error("Invalid API key or request format")
-        } else if (response.status === 403) {
+        } else if (response?.status === 403) {
           throw new Error("API key access denied or quota exceeded")
-        } else if (response.status === 429) {
+        } else if (response?.status === 429) {
           throw new Error("Rate limit exceeded. Please try again later")
         } else {
-          throw new Error(`API request failed with status ${response.status}`)
+          throw new Error(`API request failed with status ${response?.status}`)
         }
       }
 
@@ -758,19 +801,23 @@ export function PromptGenieWebsite() {
       Return only the optimized prompt, without any explanations or additional text.
       `
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeKey.key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-          }),
-        },
-      )
+      let response
 
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`)
+      if (activeKey.model.startsWith("gemini")) {
+        response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${activeKey.model}:generateContent?key=${activeKey.key}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+            }),
+          },
+        )
+      }
+
+      if (!response || !response.ok) {
+        throw new Error(`API request failed: ${response?.status}`)
       }
 
       const data = await response.json()
@@ -834,19 +881,23 @@ export function PromptGenieWebsite() {
       Return only the refactored prompt, without any explanations or additional text.
       `
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeKey.key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-          }),
-        },
-      )
+      let response
 
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`)
+      if (activeKey.model.startsWith("gemini")) {
+        response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${activeKey.model}:generateContent?key=${activeKey.key}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+            }),
+          },
+        )
+      }
+
+      if (!response || !response.ok) {
+        throw new Error(`API request failed: ${response?.status}`)
       }
 
       const data = await response.json()
@@ -1036,7 +1087,7 @@ export function PromptGenieWebsite() {
               <Button
                 key={option}
                 variant={currentAnswers[index] === option ? "default" : "outline"}
-                className="w-full justify-start text-left h-auto py-3 px-4"
+                className="w-full justify-start text-left h-auto py-3 px-4 transition-all duration-200"
                 onClick={() => updateAnswer(index, option)}
               >
                 {option}
@@ -1116,8 +1167,8 @@ export function PromptGenieWebsite() {
 
   if (isLoading) {
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <Card className="p-8 text-center max-w-sm mx-4">
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+        <Card className="p-8 text-center max-w-sm mx-4 animate-in fade-in-0 zoom-in-95 duration-300">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-lg font-medium">{loadingText}</p>
         </Card>
@@ -1129,7 +1180,7 @@ export function PromptGenieWebsite() {
     return (
       <div className="min-h-screen bg-background">
         {/* Enhanced Floating Glassmorphic Navigation */}
-        <nav className="fixed top-4 left-4 right-4 z-50 bg-background/40 backdrop-blur-md border border-border/30 rounded-2xl shadow-lg">
+        <nav className="fixed top-4 left-4 right-4 z-50 bg-background/40 backdrop-blur-md border border-border/30 rounded-2xl shadow-lg transition-all duration-300">
           <div className="container mx-auto px-4 lg:px-6">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center gap-3">
@@ -1158,46 +1209,41 @@ export function PromptGenieWebsite() {
                 </Button>
                 {user ? (
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCurrentView("app")}
-                      className="rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setCurrentView("app")} className="rounded-xl">
                       <User className="w-4 h-4 mr-2" />
                       {user.name}
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleLogout}
-                      className="rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
-                    >
+                    <Button variant="outline" size="sm" onClick={handleLogout} className="rounded-xl">
                       <LogOut className="w-4 h-4" />
                     </Button>
                   </div>
-                ) : hasAccount ? (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setAuthMode("login")
-                      setAuthOpen(true)
-                    }}
-                    className="rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
-                  >
-                    Sign In
-                  </Button>
                 ) : (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setAuthMode("signup")
-                      setAuthOpen(true)
-                    }}
-                    className="rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
-                  >
-                    Sign Up
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {hasAccount && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setAuthMode("login")
+                          setAuthOpen(true)
+                        }}
+                        className="rounded-xl"
+                      >
+                        Sign In
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setAuthMode("signup")
+                        setAuthOpen(true)
+                      }}
+                      className="rounded-xl"
+                    >
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      Sign Up
+                    </Button>
+                  </div>
                 )}
               </div>
 
@@ -1206,6 +1252,20 @@ export function PromptGenieWebsite() {
                 <Button variant="outline" size="sm" onClick={toggleTheme} className="rounded-full w-10 h-10 p-0">
                   {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
                 </Button>
+                {/* Mobile Sign Up Button - Always visible */}
+                {!user && (
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setAuthMode("signup")
+                      setAuthOpen(true)
+                    }}
+                    className="rounded-xl"
+                  >
+                    <UserPlus className="w-4 h-4 mr-1" />
+                    Sign Up
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -1219,7 +1279,7 @@ export function PromptGenieWebsite() {
 
             {/* Mobile Menu */}
             {mobileMenuOpen && (
-              <div className="lg:hidden py-4 border-t border-border/20 bg-background/90 backdrop-blur-md rounded-b-2xl">
+              <div className="lg:hidden py-4 border-t border-border/20 bg-background/90 backdrop-blur-md rounded-b-2xl animate-in slide-in-from-top-2 duration-300">
                 <div className="flex flex-col gap-4">
                   <a
                     href="#features"
@@ -1277,30 +1337,21 @@ export function PromptGenieWebsite() {
                           Sign Out
                         </Button>
                       </>
-                    ) : hasAccount ? (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setAuthMode("login")
-                          setAuthOpen(true)
-                          setMobileMenuOpen(false)
-                        }}
-                        className="rounded-xl justify-start"
-                      >
-                        Sign In
-                      </Button>
                     ) : (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setAuthMode("signup")
-                          setAuthOpen(true)
-                          setMobileMenuOpen(false)
-                        }}
-                        className="rounded-xl justify-start"
-                      >
-                        Sign Up
-                      </Button>
+                      hasAccount && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setAuthMode("login")
+                            setAuthOpen(true)
+                            setMobileMenuOpen(false)
+                          }}
+                          className="rounded-xl justify-start"
+                        >
+                          Sign In
+                        </Button>
+                      )
                     )}
                   </div>
                 </div>
@@ -1311,7 +1362,10 @@ export function PromptGenieWebsite() {
 
         {/* Auth Dialog */}
         <Dialog open={authOpen} onOpenChange={setAuthOpen}>
-          <DialogContent className="max-w-md mx-4" aria-describedby="auth-description">
+          <DialogContent
+            className="max-w-md mx-4 animate-in fade-in-0 zoom-in-95 duration-300"
+            aria-describedby="auth-description"
+          >
             <DialogHeader>
               <DialogTitle>{authMode === "login" ? "Sign In" : "Create Account"}</DialogTitle>
               <p id="auth-description" className="text-sm text-muted-foreground">
@@ -1331,7 +1385,7 @@ export function PromptGenieWebsite() {
         {/* Hero Section - Full Height */}
         <section className="min-h-screen flex items-center justify-center pt-24 pb-20 px-4">
           <div className="container mx-auto text-center max-w-4xl">
-            <div className="mb-8">
+            <div className="mb-8 animate-in fade-in-0 slide-in-from-bottom-4 duration-1000">
               <Badge variant="secondary" className="mb-6 text-sm px-4 py-2">
                 <Sparkles className="w-4 h-4 mr-2" />
                 AI-Powered Prompt Generation
@@ -1354,16 +1408,12 @@ export function PromptGenieWebsite() {
                       setAuthOpen(true)
                     }
                   }}
-                  className="text-lg px-8 py-6 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                  className="text-lg px-8 py-6 rounded-xl"
                 >
                   {user ? "Go to App" : "Get Started"}
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="text-lg px-8 py-6 rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
-                >
+                <Button size="lg" variant="outline" className="text-lg px-8 py-6 rounded-xl">
                   Watch Demo
                 </Button>
               </div>
@@ -1382,7 +1432,7 @@ export function PromptGenieWebsite() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
-              <Card className="p-6 hover:shadow-lg transition-shadow">
+              <Card className="p-6 hover:shadow-lg transition-all duration-300 hover:scale-105">
                 <Target className="w-12 h-12 text-primary mb-4" />
                 <h3 className="text-xl font-semibold mb-2">Smart Content Detection</h3>
                 <p className="text-muted-foreground">
@@ -1390,7 +1440,7 @@ export function PromptGenieWebsite() {
                 </p>
               </Card>
 
-              <Card className="p-6 hover:shadow-lg transition-shadow">
+              <Card className="p-6 hover:shadow-lg transition-all duration-300 hover:scale-105">
                 <Zap className="w-12 h-12 text-primary mb-4" />
                 <h3 className="text-xl font-semibold mb-2">Dynamic Question Generation</h3>
                 <p className="text-muted-foreground">
@@ -1398,7 +1448,7 @@ export function PromptGenieWebsite() {
                 </p>
               </Card>
 
-              <Card className="p-6 hover:shadow-lg transition-shadow">
+              <Card className="p-6 hover:shadow-lg transition-all duration-300 hover:scale-105">
                 <Hash className="w-12 h-12 text-primary mb-4" />
                 <h3 className="text-xl font-semibold mb-2">Smart Hashtag Suggestions</h3>
                 <p className="text-muted-foreground">
@@ -1406,7 +1456,7 @@ export function PromptGenieWebsite() {
                 </p>
               </Card>
 
-              <Card className="p-6 hover:shadow-lg transition-shadow">
+              <Card className="p-6 hover:shadow-lg transition-all duration-300 hover:scale-105">
                 <Shield className="w-12 h-12 text-primary mb-4" />
                 <h3 className="text-xl font-semibold mb-2">Secure API Management</h3>
                 <p className="text-muted-foreground">
@@ -1414,7 +1464,7 @@ export function PromptGenieWebsite() {
                 </p>
               </Card>
 
-              <Card className="p-6 hover:shadow-lg transition-shadow">
+              <Card className="p-6 hover:shadow-lg transition-all duration-300 hover:scale-105">
                 <Clock className="w-12 h-12 text-primary mb-4" />
                 <h3 className="text-xl font-semibold mb-2">Auto-Expiring Library</h3>
                 <p className="text-muted-foreground">
@@ -1422,7 +1472,7 @@ export function PromptGenieWebsite() {
                 </p>
               </Card>
 
-              <Card className="p-6 hover:shadow-lg transition-shadow">
+              <Card className="p-6 hover:shadow-lg transition-all duration-300 hover:scale-105">
                 <Users className="w-12 h-12 text-primary mb-4" />
                 <h3 className="text-xl font-semibold mb-2">Multiple Content Types</h3>
                 <p className="text-muted-foreground">
@@ -1445,7 +1495,7 @@ export function PromptGenieWebsite() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8">
               {testimonials.map((testimonial, index) => (
-                <Card key={index} className="p-6 hover:shadow-lg transition-shadow">
+                <Card key={index} className="p-6 hover:shadow-lg transition-all duration-300 hover:scale-105">
                   <div className="flex items-center mb-4">
                     {[...Array(testimonial.rating)].map((_, i) => (
                       <Star key={i} className="w-5 h-5 fill-yellow-400 text-yellow-400" />
@@ -1525,9 +1575,7 @@ export function PromptGenieWebsite() {
                   <div>
                     <Textarea placeholder="Your Message" rows={4} className="rounded-xl" />
                   </div>
-                  <Button className="w-full rounded-xl transition-all duration-200 hover:scale-105 active:scale-95">
-                    Send Message
-                  </Button>
+                  <Button className="w-full rounded-xl">Send Message</Button>
                 </form>
               </Card>
             </div>
@@ -1607,17 +1655,39 @@ export function PromptGenieWebsite() {
                 <h3 className="text-lg font-semibold mb-4">Add New API Key</h3>
                 <div className="space-y-4">
                   <div>
+                    <label className="text-sm font-medium mb-2 block">API Key Name</label>
                     <Input
-                      placeholder="API Key Name (e.g., 'My Gemini Key')"
+                      placeholder="e.g., 'My Gemini Key'"
                       value={newApiKeyName}
                       onChange={(e) => setNewApiKeyName(e.target.value)}
                       className="rounded-xl"
                     />
                   </div>
                   <div>
+                    <label className="text-sm font-medium mb-2 block">LLM Model</label>
+                    <Select value={newApiKeyModel} onValueChange={setNewApiKeyModel}>
+                      <SelectTrigger className="rounded-xl">
+                        <SelectValue placeholder="Select the AI model for this API key" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LLM_MODELS.map((model) => (
+                          <SelectItem key={model.value} value={model.value}>
+                            <div className="flex items-center gap-2">
+                              <span>{model.label}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                {model.provider}
+                              </Badge>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">API Key</label>
                     <Input
                       type="password"
-                      placeholder="Enter your Gemini API key"
+                      placeholder="Enter your API key"
                       value={newApiKeyValue}
                       onChange={(e) => setNewApiKeyValue(e.target.value)}
                       className="rounded-xl"
@@ -1625,8 +1695,8 @@ export function PromptGenieWebsite() {
                   </div>
                   <Button
                     onClick={addApiKey}
-                    disabled={!newApiKeyName.trim() || !newApiKeyValue.trim()}
-                    className="rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                    disabled={!newApiKeyName.trim() || !newApiKeyValue.trim() || !newApiKeyModel.trim()}
+                    className="rounded-xl"
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     Add API Key
@@ -1640,7 +1710,7 @@ export function PromptGenieWebsite() {
                   <Card className="p-6 text-center">
                     <Key className="w-12 h-12 mx-auto mb-4 opacity-50" />
                     <p className="text-muted-foreground">
-                      No API keys added yet. Add your first Gemini API key to get started.
+                      No API keys added yet. Add your first API key to get started.
                     </p>
                   </Card>
                 ) : (
@@ -1654,8 +1724,15 @@ export function PromptGenieWebsite() {
                             ) : (
                               <AlertCircle className="w-5 h-5 text-red-500" />
                             )}
-                            <span className="font-medium">{key.name}</span>
-                            {key.isActive && <Badge variant="default">Active</Badge>}
+                            <div>
+                              <span className="font-medium">{key.name}</span>
+                              <div className="flex items-center gap-2 mt-1">
+                                <Badge variant="outline" className="text-xs">
+                                  {LLM_MODELS.find((m) => m.value === key.model)?.label || key.model}
+                                </Badge>
+                                {key.isActive && <Badge variant="default">Active</Badge>}
+                              </div>
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1906,11 +1983,7 @@ export function PromptGenieWebsite() {
                           <Trash2 className="w-4 h-4 mr-2" />
                           Clear
                         </Button>
-                        <Button
-                          onClick={analyzeInput}
-                          disabled={!userInput.trim()}
-                          className="rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
-                        >
+                        <Button onClick={analyzeInput} disabled={!userInput.trim()} className="rounded-xl">
                           <Search className="w-4 h-4 mr-2" />
                           Analyze & Generate Questions
                         </Button>
@@ -2000,7 +2073,7 @@ export function PromptGenieWebsite() {
                     <Button
                       onClick={generateOptimizedPrompt}
                       disabled={answeredCount < totalQuestions}
-                      className="rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                      className="rounded-xl"
                     >
                       <Magic className="w-4 h-4 mr-2" />
                       Generate Optimized Prompt
@@ -2082,7 +2155,7 @@ export function PromptGenieWebsite() {
                         setHashtags([])
                         setSuggestedHashtags([])
                       }}
-                      className="rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                      className="rounded-xl"
                     >
                       <Plus className="w-4 h-4 mr-2" />
                       Generate New Prompt
@@ -2128,7 +2201,7 @@ export function PromptGenieWebsite() {
                     <Button
                       onClick={refactorPromptWithAI}
                       disabled={!refactorPrompt.trim() || !refactorReason.trim()}
-                      className="w-full rounded-xl transition-all duration-200 hover:scale-105 active:scale-95"
+                      className="w-full rounded-xl"
                     >
                       <Magic className="w-4 h-4 mr-2" />
                       Refactor Prompt
