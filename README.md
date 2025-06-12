@@ -309,7 +309,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Documentation**: Check this README and inline comments
 - **Issues**: Report bugs via GitHub Issues
 - **Discussions**: Join GitHub Discussions for questions
-- **Email**: contact@promptgenie.ai
+- **Email**: rative.project.suve@gmail.com
 
 ## 🗺️ Roadmap
 
@@ -323,6 +323,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <div align="center">
-  <p>Made with ❤️ by the PromptGenie Team</p>
+  <p>Developed by ❤️ by the PromptGenie Team</p>
   <p>⭐ Star this repo if you find it helpful!</p>
 </div>
