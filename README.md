@@ -323,6 +323,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <div align="center">
-  <p>Developed by ❤️ by the PromptGenie Team</p>
+  <p>Developed by ❤️ by the Suvendu</p>
   <p>⭐ Star this repo if you find it helpful!</p>
 </div>
